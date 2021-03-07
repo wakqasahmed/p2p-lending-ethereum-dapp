@@ -1,0 +1,17 @@
+{
+  "name": "p2p-lending",
+  "version": "0.0.1",
+  "description": "Peer to Peer Lending",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "author": "Waqas Ahmed",
+  "license": "ISC",
+  "devDependencies": {
+    "truffle": "^5.2.3"
+  },
+  "dependencies": {
+    "@openzeppelin/contracts": "^3.4.1"
+  }
+}
