@@ -34,7 +34,7 @@ contract P2PLending is ILendingRequest {
 // Implementation Notes:
 // 1) Address of the borrower is used as a loanId for simplification. 
 //TODO: indexed loanId could be used to detach loan request from address, to allow an address to be a borrower, lender and/or guarantor at the same time.
-
+//TODO: use legal terms if possible - https://hls.harvard.edu/dept/sfs/glossary-of-loan-terms/#holder2
 //     Auth private auth;
 
 // constructor(Auth _auth) public {
@@ -67,8 +67,10 @@ contract P2PLending is ILendingRequest {
   address payable public admin;  
   address payable public borrower1;
   address payable public borrower2;
-  address payable public guarantor;
-  address payable public lender;
+  address payable public guarantor1;
+  address payable public guarantor2;
+  address payable public lender1;
+  address payable public lender2;
   
   // using withdrawal pattern
   mapping (address => uint) pendingGuarantorWithdrawals;
@@ -79,6 +81,9 @@ contract P2PLending is ILendingRequest {
   loanRequestStruct[] loanRequestsLenderView;    
   address[] allLoanRequests;
 
+  event LoanRequested(loanRequestStruct loanRequest);
+
+
     function setAdminAccount(address payable _adminAcc) public {
         admin = _adminAcc;
     }
@@ -88,12 +93,14 @@ contract P2PLending is ILendingRequest {
         borrower2 = _borrower2Acc;
     }    
 
-    function setGuarantorAccount(address payable _guarantorAcc) public {
-        guarantor = _guarantorAcc;
+    function setGuarantorsAccount(address payable _guarantor1Acc, address payable _guarantor2Acc) public {
+        guarantor1 = _guarantor1Acc;
+        guarantor2 = _guarantor2Acc;
     }
 
-    function setLenderAccount(address payable _lenderAcc) public {
-        lender = _lenderAcc;
+    function setLendersAccount(address payable _lender1Acc, address payable _lender2Acc) public {
+        lender1 = _lender1Acc;
+        lender2 = _lender2Acc;
     }    
 
 
@@ -104,7 +111,7 @@ contract P2PLending is ILendingRequest {
     }    
 
     function getLoanRequestsForGuarantor() public returns (loanRequestStruct[] memory) {    
-        require (msg.sender == guarantor, "Invalid action, you are not registered as a guarantor.");        
+        require (msg.sender == guarantor1 || msg.sender == guarantor2 , "Invalid action, you are not registered as a guarantor.");        
         
         //return requests where either msg.sender is guarantor OR loanState is LoanRequested
         
@@ -119,7 +126,7 @@ contract P2PLending is ILendingRequest {
     }    
 
     function getLoanRequestsForLender() public returns (loanRequestStruct[] memory) {    
-        require (msg.sender == lender, "Invalid action, you are not registered as a lender.");        
+        require (msg.sender == lender1 || msg.sender == lender2, "Invalid action, you are not registered as a lender.");        
 
         //return requests where either msg.sender is lender OR loanState is LoanRequested or GuaranteePlaced        
         //Counterintuitive for gas and scalability, find a way to not iterate over and not changing state, making it just a view
@@ -130,14 +137,14 @@ contract P2PLending is ILendingRequest {
         }        
         
         return loanRequestsLenderView;
-    }    
+    }
 
     function requestLoan (uint _loanAmount, uint _paybackDate, uint _paybackInterestAmount) override external returns (bool){
         require(loanRequestMapping[msg.sender].borrower != msg.sender, "Pending request exists. Either cancel it or wait for it to proceed.");
         require (msg.sender == borrower1 || msg.sender == borrower2, "Invalid action, you are not registered as a borrower.");
         require (_loanAmount > _paybackInterestAmount, "Invalid input (paybackInterestAmount), do you really want to pay interest more than the loan amount?");
         require (_paybackInterestAmount > 0, "Invalid input (paybackInterestAmount), why do you think someone will lend you money without any interest?");
-        // require (_paybackDate > block.timestamp, "Invalid input (paybackDate), do you have a timemachine to payback going into the past?");
+        require (block.timestamp + (_paybackDate * 1 days) > block.timestamp, "Invalid input (paybackDate), do you have a timemachine to payback going into the past?");
         
         // loanRequestStruct storage loanReq = loanRequestMapping[msg.sender];
         // loanReq.loanAmount = _loanAmount;
@@ -152,7 +159,7 @@ contract P2PLending is ILendingRequest {
         loanRequestMapping[msg.sender] = loanRequestStruct(
                 TransactionStates.LoanRequested,
                 _loanAmount,
-                _paybackDate,
+                block.timestamp + (_paybackDate * 1 days),
                 _paybackInterestAmount,
                 0,
                 0,
@@ -162,12 +169,13 @@ contract P2PLending is ILendingRequest {
             );
 
         allLoanRequests.push(msg.sender);
+        emit LoanRequested(loanRequestMapping[msg.sender]);
         return true;
     }
 
     function placeGuarantee(address loanRequestAddress, uint _guarantorInterestAmount) override external payable returns (bool) {
         // Validate the user is supposedly registered as the guarantor
-        require (msg.sender == guarantor, "Invalid action, you are not registered as a guarantor.");
+        require (msg.sender == guarantor1 || msg.sender == guarantor2, "Invalid action, you are not registered as a guarantor.");
 
         //Loan request is in its initial state - LoanRequested
         require(loanRequestMapping[loanRequestAddress].loanState == TransactionStates.LoanRequested, "Invalid action, guarantee cannot be placed at this state.");         
@@ -218,7 +226,7 @@ contract P2PLending is ILendingRequest {
 
     function grantLoan(address loanRequestAddress) override external payable returns (bool) {
         // Validate the user is supposedly registered as the guarantor
-        require (msg.sender == lender, "Invalid action, you are not registered as a lender.");
+        require (msg.sender == lender1 || msg.sender == lender2, "Invalid action, you are not registered as a lender.");
 
         //Loan request is in the state - GuaranteeAccepted
         require(loanRequestMapping[loanRequestAddress].loanState == TransactionStates.GuaranteeAccepted, "Invalid action, loan cannot be granted at this state.");         
@@ -242,7 +250,7 @@ contract P2PLending is ILendingRequest {
 
     function withdrawGuarantee(address loanRequestAddress) override external returns (bool) {
         // Validate the user is supposedly registered as the lender
-        require (msg.sender == lender, "Invalid action, you are not registered as a lender.");
+        require (msg.sender == lender1 || msg.sender == lender2, "Invalid action, you are not registered as a lender.");
 
         //msg.sender is the same lender who lent the money?
         require(loanRequestMapping[loanRequestAddress].lender == msg.sender, "Invalid action, did you really granted this loan request?");                 
@@ -270,7 +278,7 @@ contract P2PLending is ILendingRequest {
         require(loanRequestMapping[loanRequestAddress].loanState == TransactionStates.LoanGranted, "Invalid action, loan cannot be payback at this state.");         
 
         //borrower has passed value equivalent of loanAmount + paybackInterestAmount
-        require(msg.value == loanRequestMapping[loanRequestAddress].loanAmount * (1 ether) + loanRequestMapping[loanRequestAddress].paybackInterestAmount * (1 ether), "Insufficient funds. Funds are not equal to the Loan amount + paybackInterest Amount.");        
+        // require(msg.value == ((loanRequestMapping[loanRequestAddress].loanAmount * (1 ether)) + (loanRequestMapping[loanRequestAddress].paybackInterestAmount * (1 ether))), "Insufficient funds. Funds are not equal to the Loan amount + paybackInterest Amount.");        
 
         admin.transfer(msg.value);
         

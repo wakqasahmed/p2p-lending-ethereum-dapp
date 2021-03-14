@@ -9,6 +9,7 @@
   "author": "Waqas Ahmed",
   "license": "ISC",
   "devDependencies": {
+    "@openzeppelin/test-helpers": "^0.5.10",
     "truffle": "^5.2.3"
   },
   "dependencies": {
