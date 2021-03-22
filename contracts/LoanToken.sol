@@ -6,7 +6,7 @@ import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 
 contract LoanToken is ERC20 {
 
-    constructor() public ERC20("LoanToken", "P2P") {
+    constructor() public ERC20("LoanToken", "DFI") {
       _mint(msg.sender, 1000000); // 1 million
       _setupDecimals(0);
     }
